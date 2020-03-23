@@ -11,6 +11,9 @@
 #import <CoreLocation/CLLocationManager.h>
 #import <CoreLocation/CLLocationManagerDelegate.h>
 
+#import <ExternalAccessory/ExternalAccessory.h>
+#import "BadElfController.h"
+
 #import <React/RCTAssert.h>
 #import <React/RCTBridge.h>
 #import <React/RCTConvert.h>
@@ -139,6 +142,7 @@ static NSDictionary<NSString *, id> *RNCPositionError(RNCPositionErrorCode code,
   BOOL _usingSignificantChanges;
   RNCGeolocationConfiguration _locationConfiguration;
   RNCGeolocationOptions _observerOptions;
+  BadElfController *_badElfController;
 }
 
 RCT_EXPORT_MODULE()
@@ -185,6 +189,17 @@ RCT_EXPORT_MODULE()
   _usingSignificantChanges ?
   [_locationManager startMonitoringSignificantLocationChanges] :
   [_locationManager startUpdatingLocation];
+}
+
+- (void)badElfDataReceived:(NSNotification *)notification
+{
+  if (_badElfController.dataAsString!= nil) {
+    NSDictionary *result = [_badElfController getLocationFromData];
+    if (result != nil) {
+      _lastLocationEvent = result;
+      [self sendEventWithName:@"geolocationDidChange" body:_lastLocationEvent];
+    }
+}
 }
 
 #pragma mark - Timeout handler
@@ -263,6 +278,15 @@ RCT_EXPORT_METHOD(startObserving:(RNCGeolocationOptions)options)
                                  distanceFilter:_observerOptions.distanceFilter
                           useSignificantChanges:_observerOptions.useSignificantChanges];
   _observingLocation = YES;
+    
+  // Bad Elf GPS
+  _badElfController = [[BadElfController alloc] init];
+  NSArray<EAAccessory *> *connectedAccessories = [[EAAccessoryManager sharedAccessoryManager] connectedAccessories];
+  if ([connectedAccessories count] == 1) {
+    _observingLocation = NO;
+    [_badElfController openSessionForProtocol:[connectedAccessories objectAtIndex:0].protocolStrings[0]];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(badElfDataReceived:) name:@"BESessionDataReceivedNotification" object:nil];
+  }
 }
 
 RCT_EXPORT_METHOD(stopObserving)
