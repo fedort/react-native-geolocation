@@ -176,6 +176,22 @@ RCT_EXPORT_MODULE()
     [self requestAuthorization];
   }
 
+  // Check if bad elf accessory is attached
+  NSArray<EAAccessory *> *connectedAccessories = [[EAAccessoryManager sharedAccessoryManager] connectedAccessories];
+  if ([connectedAccessories count] == 1) {
+    if (_badElfController == nil) {
+      _badElfController = [[BadElfController alloc] init];
+      NSArray<EAAccessory *> *connectedAccessories = [[EAAccessoryManager sharedAccessoryManager] connectedAccessories];
+      if ([connectedAccessories count] == 1) {
+        //_observingLocation = NO;
+        [_locationManager stopUpdatingLocation];
+        [_badElfController openSessionForProtocol:[connectedAccessories objectAtIndex:0].protocolStrings[0]];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(badElfDataReceived:) name:@"BESessionDataReceivedNotification" object:nil];
+      }
+    }
+  }
+  // Else use native location manager
+  else {
   if (!_locationManager) {
     _locationManager = [CLLocationManager new];
     _locationManager.delegate = self;
@@ -189,17 +205,25 @@ RCT_EXPORT_MODULE()
   _usingSignificantChanges ?
   [_locationManager startMonitoringSignificantLocationChanges] :
   [_locationManager startUpdatingLocation];
+  }
 }
 
 - (void)badElfDataReceived:(NSNotification *)notification
 {
-  if (_badElfController.dataAsString!= nil) {
-    NSDictionary *result = [_badElfController getLocationFromData];
-    if (result != nil) {
-      _lastLocationEvent = result;
-      [self sendEventWithName:@"geolocationDidChange" body:_lastLocationEvent];
+    if (_badElfController.dataAsString!= nil) {
+        NSDictionary *result = [_badElfController getLocationFromData];
+        if (result != nil) {
+          _lastLocationEvent = result;
+          [self sendEventWithName:@"geolocationDidChange" body:_lastLocationEvent];
+          
+          // Fire all queued callbacks
+          for (RNCGeolocationRequest *request in _pendingRequests) {
+            request.successBlock(@[_lastLocationEvent]);
+            [request.timeoutTimer invalidate];
+          }
+          [_pendingRequests removeAllObjects];
+        }
     }
-}
 }
 
 #pragma mark - Timeout handler
@@ -278,15 +302,6 @@ RCT_EXPORT_METHOD(startObserving:(RNCGeolocationOptions)options)
                                  distanceFilter:_observerOptions.distanceFilter
                           useSignificantChanges:_observerOptions.useSignificantChanges];
   _observingLocation = YES;
-    
-  // Bad Elf GPS
-  _badElfController = [[BadElfController alloc] init];
-  NSArray<EAAccessory *> *connectedAccessories = [[EAAccessoryManager sharedAccessoryManager] connectedAccessories];
-  if ([connectedAccessories count] == 1) {
-    _observingLocation = NO;
-    [_badElfController openSessionForProtocol:[connectedAccessories objectAtIndex:0].protocolStrings[0]];
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(badElfDataReceived:) name:@"BESessionDataReceivedNotification" object:nil];
-  }
 }
 
 RCT_EXPORT_METHOD(stopObserving)
@@ -313,7 +328,8 @@ RCT_EXPORT_METHOD(getCurrentPosition:(RNCGeolocationOptions)options
     return;
   }
 
-  if (![CLLocationManager locationServicesEnabled]) {
+  NSArray<EAAccessory *> *connectedAccessories = [[EAAccessoryManager sharedAccessoryManager] connectedAccessories];
+  if (![CLLocationManager locationServicesEnabled] && [connectedAccessories count] == 0) {
     if (errorBlock) {
       errorBlock(@[
                    RNCPositionError(RNCPositionErrorUnavailable, @"Location services disabled.")
