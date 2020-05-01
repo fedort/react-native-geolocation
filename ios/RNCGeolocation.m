@@ -181,13 +181,11 @@ RCT_EXPORT_MODULE()
   if ([connectedAccessories count] == 1) {
     if (_badElfController == nil) {
       _badElfController = [[BadElfController alloc] init];
-      NSArray<EAAccessory *> *connectedAccessories = [[EAAccessoryManager sharedAccessoryManager] connectedAccessories];
-      if ([connectedAccessories count] == 1) {
-        //_observingLocation = NO;
-        [_locationManager stopUpdatingLocation];
-        [_badElfController openSessionForProtocol:[connectedAccessories objectAtIndex:0].protocolStrings[0]];
-        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(badElfDataReceived:) name:@"BESessionDataReceivedNotification" object:nil];
-      }
+        
+      [_locationManager stopUpdatingLocation];
+      [_badElfController openSessionForProtocol:[connectedAccessories objectAtIndex:0].protocolStrings[0]];
+      [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(badElfDataReceived:) name:@"BESessionDataReceivedNotification" object:nil];
+      [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(badElfReconnect:) name:UIApplicationWillEnterForegroundNotification object:nil];
     }
   }
   // Else use native location manager
@@ -210,7 +208,7 @@ RCT_EXPORT_MODULE()
 
 - (void)badElfDataReceived:(NSNotification *)notification
 {
-    if (_badElfController.dataAsString!= nil) {
+    if (_badElfController.dataAsString != nil) {
         NSDictionary *result = [_badElfController getLocationFromData];
         if (result != nil) {
           _lastLocationEvent = result;
@@ -223,6 +221,15 @@ RCT_EXPORT_MODULE()
           }
           [_pendingRequests removeAllObjects];
         }
+    }
+}
+
+- (void)badElfReconnect:(NSNotification *)notification
+{
+    NSArray<EAAccessory *> *connectedAccessories = [[EAAccessoryManager sharedAccessoryManager] connectedAccessories];
+    if ([connectedAccessories count] == 1) {
+        [_badElfController closeSession];
+        [_badElfController openSessionForProtocol:[connectedAccessories objectAtIndex:0].protocolStrings[0]];
     }
 }
 

@@ -43,6 +43,20 @@
     return _session;
 }
 
+- (void)closeSession {
+    [[_session inputStream] close];
+    [[_session inputStream] removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
+    [[_session inputStream] setDelegate:nil];
+    
+    [[_session outputStream] close];
+    [[_session outputStream] removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
+    [[_session outputStream] setDelegate:nil];
+    
+    _session = nil;
+    _writeData = nil;
+    _readData = nil;
+}
+
 - (void)stream:(NSStream*)theStream handleEvent:(NSStreamEvent)streamEvent
 {
     switch (streamEvent)

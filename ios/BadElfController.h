@@ -17,6 +17,7 @@
 @property NSMutableData *writeData;
 
 - (EASession *)openSessionForProtocol:(NSString *)protocolString;
+- (void)closeSession;
 - (NSDictionary *)getLocationFromData;
 
 @end
